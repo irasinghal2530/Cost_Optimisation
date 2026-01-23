@@ -1,3 +1,4 @@
+
 # import streamlit as st
 # import pandas as pd
 # import numpy as np
@@ -283,17 +284,29 @@
 # st.divider()
 # # st.caption("Decision intelligence supports clarity — not automation.")
 
-##app.py(frontend-streamlit)
+#app.py(frontend-streamlit)
 import streamlit as st
 import pandas as pd
 import requests
 import plotly.express as px
 import os
+from dotenv import load_dotenv
 
-BACKEND_URL = os.getenv("BACKEND_URL")
+# Load env vars
+load_dotenv()
 
-if not BACKEND_URL:
-    st.error("BACKEND_URL environment variable is not set")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+
+if "0.0.0.0" in BACKEND_URL:
+    raise RuntimeError(
+        "BACKEND_URL cannot be 0.0.0.0 — use localhost or a real hostname"
+    )
+
+# Ensure backend is reachable
+try:
+    requests.get(f"{BACKEND_URL}/", timeout=3)
+except Exception:
+    st.error(f"Backend not reachable at {BACKEND_URL}")
     st.stop()
 
 

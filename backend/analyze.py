@@ -1,3 +1,5 @@
+
+# ##analyze.py
 # import pandas as pd
 # import pdfplumber
 # import math
@@ -43,14 +45,12 @@
 # # -------------------------------
 
 # def extract_facts_from_df(df, filename):
-#     """
-#     Very conservative fact extraction:
-#     - Look for a vendor-like column
-#     - Extract numeric attributes per row
-#     """
 #     facts = []
 
-#     # Find vendor column
+#     # Normalize column names
+#     df.columns = [str(c).strip() for c in df.columns]
+
+#     # Detect vendor column
 #     vendor_col = None
 #     for col in df.columns:
 #         if "vendor" in col.lower():
@@ -58,25 +58,25 @@
 #             break
 
 #     if vendor_col is None:
-#         return facts  # no safe entity → no facts
+#         return facts
 
 #     for _, row in df.iterrows():
 #         vendor = row.get(vendor_col)
-#         if not vendor:
+#         if not vendor or pd.isna(vendor):
 #             continue
 
 #         for col in df.columns:
 #             if col == vendor_col:
 #                 continue
 
-#             value = row.get(col)
+#             val = row.get(col)
 
-#             if isinstance(value, (int, float)) and not pd.isna(value):
+#             if isinstance(val, (int, float)) and not pd.isna(val):
 #                 facts.append({
 #                     "entity_type": "vendor",
-#                     "entity_name": str(vendor),
-#                     "attribute": col.lower(),
-#                     "value": value,
+#                     "entity_name": str(vendor).strip(),
+#                     "attribute": col.lower().strip(),
+#                     "value": float(val),
 #                     "source": filename
 #                 })
 
@@ -89,43 +89,52 @@
 
 # async def analyze_files(files):
 #     summaries = []
-#     facts = []   # ⭐ NEW
+#     facts = []
 
 #     for f in files:
-#         name = f.filename.lower()
+#         filename = f.filename
+#         name = filename.lower()
 
 #         try:
 #             # ---------------- CSV ----------------
 #             if name.endswith(".csv"):
+#                 f.file.seek(0)
 #                 df = pd.read_csv(f.file)
 #                 df = df.where(pd.notnull(df), None)
 
 #                 summaries.append({
-#                     "filename": f.filename,
+#                     "filename": filename,
 #                     "type": "csv",
 #                     "rows": int(len(df)),
 #                     "columns": list(df.columns),
 #                     "sample": df.head(3).to_dict(orient="records")
 #                 })
 
-#                 # ⭐ FACT EXTRACTION
-#                 facts.extend(extract_facts_from_df(df, f.filename))
+#                 try:
+#                     facts.extend(extract_facts_from_df(df, filename))
+#                 except Exception:
+#                     pass  # never let facts break analysis
 
 #             # ---------------- EXCEL ----------------
 #             elif name.endswith(".xls") or name.endswith(".xlsx"):
-#                 df = pd.read_excel(f.file)
+#                 f.file.seek(0)
+
+#                 # Always read first sheet only (robust default)
+#                 df = pd.read_excel(f.file, sheet_name=0)
 #                 df = df.where(pd.notnull(df), None)
 
 #                 summaries.append({
-#                     "filename": f.filename,
+#                     "filename": filename,
 #                     "type": "excel",
 #                     "rows": int(len(df)),
 #                     "columns": list(df.columns),
 #                     "sample": df.head(3).to_dict(orient="records")
 #                 })
 
-#                 # ⭐ FACT EXTRACTION
-#                 facts.extend(extract_facts_from_df(df, f.filename))
+#                 try:
+#                     facts.extend(extract_facts_from_df(df, filename))
+#                 except Exception:
+#                     pass
 
 #             # ---------------- PDF ----------------
 #             elif name.endswith(".pdf"):
@@ -133,30 +142,30 @@
 
 #                 if len(text.strip()) < 100:
 #                     summaries.append({
-#                         "filename": f.filename,
+#                         "filename": filename,
 #                         "type": "pdf",
 #                         "error": "No extractable text found (likely scanned PDF)"
 #                     })
 #                 else:
 #                     summaries.append({
-#                         "filename": f.filename,
+#                         "filename": filename,
 #                         "type": "pdf",
 #                         "text_preview": text[:1500]
 #                     })
 
-#                 # ❌ NO FACTS FROM PDF YET (intentional)
+#                 # No facts from PDFs yet (by design)
 
 #             # ---------------- UNSUPPORTED ----------------
 #             else:
 #                 summaries.append({
-#                     "filename": f.filename,
+#                     "filename": filename,
 #                     "type": "unsupported",
 #                     "error": "Unsupported file type"
 #                 })
 
 #         except Exception as e:
 #             summaries.append({
-#                 "filename": f.filename,
+#                 "filename": filename,
 #                 "type": "error",
 #                 "error": str(e)
 #             })
@@ -166,16 +175,20 @@
 
 #     result = {
 #         "vendor_data": summaries,
-#         "facts": facts,       # ⭐ NEW
+#         "facts": facts,
 #         "analysis": analysis
 #     }
 
 #     return clean_for_json(result)
 
-##analyze.py
+# backend/analyze.py
+
 import pandas as pd
 import pdfplumber
 import math
+from typing import List
+from fastapi import UploadFile
+
 from backend.llm import call_llm
 
 
@@ -200,7 +213,7 @@ def clean_for_json(obj):
 # PDF TEXT EXTRACTION
 # -------------------------------
 
-def extract_text_from_pdf(upload_file):
+def extract_text_from_pdf(upload_file: UploadFile) -> str:
     upload_file.file.seek(0)
 
     text = ""
@@ -217,7 +230,7 @@ def extract_text_from_pdf(upload_file):
 # FACT EXTRACTION FROM TABLES
 # -------------------------------
 
-def extract_facts_from_df(df, filename):
+def extract_facts_from_df(df: pd.DataFrame, filename: str) -> list:
     facts = []
 
     # Normalize column names
@@ -235,6 +248,7 @@ def extract_facts_from_df(df, filename):
 
     for _, row in df.iterrows():
         vendor = row.get(vendor_col)
+
         if not vendor or pd.isna(vendor):
             continue
 
@@ -260,7 +274,7 @@ def extract_facts_from_df(df, filename):
 # MAIN ANALYSIS FUNCTION
 # -------------------------------
 
-async def analyze_files(files):
+async def analyze_files(files: List[UploadFile]) -> dict:
     summaries = []
     facts = []
 
@@ -286,13 +300,11 @@ async def analyze_files(files):
                 try:
                     facts.extend(extract_facts_from_df(df, filename))
                 except Exception:
-                    pass  # never let facts break analysis
+                    pass  # facts must never break analysis
 
             # ---------------- EXCEL ----------------
             elif name.endswith(".xls") or name.endswith(".xlsx"):
                 f.file.seek(0)
-
-                # Always read first sheet only (robust default)
                 df = pd.read_excel(f.file, sheet_name=0)
                 df = df.where(pd.notnull(df), None)
 
@@ -325,8 +337,6 @@ async def analyze_files(files):
                         "type": "pdf",
                         "text_preview": text[:1500]
                     })
-
-                # No facts from PDFs yet (by design)
 
             # ---------------- UNSUPPORTED ----------------
             else:
