@@ -1,30 +1,35 @@
 ##llm.py
 import os
 import json
+import google.generativeai as genai
 from dotenv import load_dotenv
-from openai import OpenAI
 
 # Load environment variables at the very beginning
 load_dotenv()
 
 from backend.decision_lens import VENDOR_SELECTION_LENS  
 
-def _check_openai_key():
-    if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("OPENAI_API_KEY not found in environment. Please check your .env file.")
+def _check_gemini_key():
+    if not os.getenv("GEMINI_API_KEY"):
+        raise RuntimeError("GEMINI_API_KEY not found in environment. Please check your .env file.")
 
-_check_openai_key()
+_check_gemini_key()
 
-client = OpenAI()
+# Configure the Gemini API
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 SYSTEM_PROMPT = """
 You are a decision intelligence assistant.
-
 You help users think clearly about trade-offs, risks, and assumptions.
 You NEVER recommend actions or make decisions.
 """
 
 async def call_llm(summaries, facts):
+    model = genai.GenerativeModel(
+        model_name="gemini-3-flash-preview",
+        system_instruction=SYSTEM_PROMPT
+    )
+    
     prompt = f"""
 You are analyzing vendor and procurement information.
 
@@ -46,7 +51,7 @@ YOUR TASK:
 - Do NOT rank vendors
 - Do NOT suggest negotiation tactics
 
-Return VALID JSON exactly in this format:
+Return ONLY VALID JSON exactly in this format:
 
 {{
   "insights": [],
@@ -63,16 +68,15 @@ DOCUMENT CONTEXT:
 {json.dumps(summaries, indent=2)}
 """
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        temperature=0.2,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt}
-        ]
+    response = model.generate_content(
+        prompt,
+        generation_config=genai.GenerationConfig(
+            response_mime_type="application/json",
+            temperature=0.2
+        )
     )
 
-    raw = response.choices[0].message.content.strip()
+    raw = response.text.strip()
 
     try:
         return json.loads(raw)
@@ -87,6 +91,11 @@ DOCUMENT CONTEXT:
         }
 
 async def chat_reply(question, context):
+    model = genai.GenerativeModel(
+        model_name="gemini-3-flash-preview",
+        system_instruction=SYSTEM_PROMPT
+    )
+    
     prompt = f"""
 Context (do not repeat verbatim):
 {json.dumps(context, indent=2)}
@@ -104,13 +113,11 @@ RULES:
 - DO NOT choose vendors
 """
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        temperature=0.4,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt}
-        ]
+    response = model.generate_content(
+        prompt,
+        generation_config=genai.GenerationConfig(
+            temperature=0.4
+        )
     )
 
-    return response.choices[0].message.content.strip()
+    return response.text.strip()
