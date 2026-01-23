@@ -283,6 +283,10 @@ import pandas as pd
 import plotly.express as px
 import requests
 import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # -----------------------
 # Backend URL from env
@@ -483,7 +487,17 @@ with tabs[5]:
             st.warning("Upload documents and run analysis first!")
         else:
             try:
-                r = requests.post(f"{BACKEND_URL}/chat", json={"question": q}, timeout=30)
+                # r = requests.post(f"{BACKEND_URL}/chat", json={"question": q}, timeout=30)
+
+                r = requests.post(
+    f"{BACKEND_URL}/chat",
+    json={
+        "question": q,
+        "context": st.session_state.analysis
+    },
+    timeout=30
+)
+
                 reply = r.json().get("reply", "No response")
                 st.session_state.messages.append({"role": "user", "content": q})
                 st.session_state.messages.append({"role": "assistant", "content": reply})

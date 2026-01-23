@@ -19,34 +19,51 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-LAST_CONTEXT = None
+# LAST_CONTEXT = None
 
 @app.get("/")
 def health():
     return {"status": "Backend running"}
 
+# @app.post("/analyze")
+# async def analyze(files: list[UploadFile] = File(...)):
+#     global LAST_CONTEXT
+#     result = await analyze_files(files)
+#     LAST_CONTEXT = result
+#     return result
+
 @app.post("/analyze")
 async def analyze(files: list[UploadFile] = File(...)):
-    global LAST_CONTEXT
-    result = await analyze_files(files)
-    LAST_CONTEXT = result
-    return result
+    return await analyze_files(files)
+
 
 @app.post("/chat")
 async def chat(data: dict):
     question = data.get("question", "")
+    context = data.get("context")
 
-    if not LAST_CONTEXT:
-        return {"reply": "No analysis context available yet."}
-
-    context = {
-        "facts": LAST_CONTEXT.get("facts", []),
-        "analysis": LAST_CONTEXT.get("analysis", {}),
-        "vendor_data": LAST_CONTEXT.get("vendor_data", [])
-    }
+    if not context:
+        return {"reply": "No analysis context provided."}
 
     reply = await chat_reply(question, context)
     return {"reply": reply}
+
+
+# @app.post("/chat")
+# async def chat(data: dict):
+#     question = data.get("question", "")
+
+#     if not LAST_CONTEXT:
+#         return {"reply": "No analysis context available yet."}
+
+#     context = {
+#         "facts": LAST_CONTEXT.get("facts", []),
+#         "analysis": LAST_CONTEXT.get("analysis", {}),
+#         "vendor_data": LAST_CONTEXT.get("vendor_data", [])
+#     }
+
+#     reply = await chat_reply(question, context)
+#     return {"reply": reply}
 
 # 🔴 VERY IMPORTANT: show real errors instead of silent 500s
 @app.exception_handler(Exception)

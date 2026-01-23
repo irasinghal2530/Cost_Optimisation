@@ -1,7 +1,8 @@
 ##llm.py
 import os
 import json
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
 # Load environment variables at the very beginning
@@ -15,8 +16,12 @@ def _check_gemini_key():
 
 _check_gemini_key()
 
-# Configure the Gemini API
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+# Configure the Gemini API using the new google-genai SDK
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+# Note: Using gemini-2.0-flash or gemini-1.5-flash as gemini-3 is not a released model.
+# I will use gemini-2.0-flash as it is the most modern stable version.
+MODEL_ID = "gemini-2.0-flash"
 
 SYSTEM_PROMPT = """
 You are a decision intelligence assistant.
@@ -25,12 +30,9 @@ You NEVER recommend actions or make decisions.
 """
 
 async def call_llm(summaries, facts):
-    model = genai.GenerativeModel(
-        model_name="gemini-3-flash-preview",
-        system_instruction=SYSTEM_PROMPT
-    )
-    
     prompt = f"""
+{SYSTEM_PROMPT}
+
 You are analyzing vendor and procurement information.
 
 DECISION LENS (how this company evaluates vendors):
@@ -68,9 +70,10 @@ DOCUMENT CONTEXT:
 {json.dumps(summaries, indent=2)}
 """
 
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.GenerationConfig(
+    response = client.models.generate_content(
+        model=MODEL_ID,
+        contents=prompt,
+        config=types.GenerateContentConfig(
             response_mime_type="application/json",
             temperature=0.2
         )
@@ -91,12 +94,9 @@ DOCUMENT CONTEXT:
         }
 
 async def chat_reply(question, context):
-    model = genai.GenerativeModel(
-        model_name="gemini-3-flash-preview",
-        system_instruction=SYSTEM_PROMPT
-    )
-    
     prompt = f"""
+{SYSTEM_PROMPT}
+
 Context (do not repeat verbatim):
 {json.dumps(context, indent=2)}
 
@@ -113,9 +113,10 @@ RULES:
 - DO NOT choose vendors
 """
 
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.GenerationConfig(
+    response = client.models.generate_content(
+        model=MODEL_ID,
+        contents=prompt,
+        config=types.GenerateContentConfig(
             temperature=0.4
         )
     )
