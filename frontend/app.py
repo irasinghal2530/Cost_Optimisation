@@ -283,14 +283,19 @@
 # st.divider()
 # # st.caption("Decision intelligence supports clarity — not automation.")
 
-
+##app.py(frontend-streamlit)
 import streamlit as st
 import pandas as pd
 import requests
 import plotly.express as px
 import os
 
-BACKEND_URL = os.environ["BACKEND_URL"]
+BACKEND_URL = os.getenv("BACKEND_URL")
+
+if not BACKEND_URL:
+    st.error("BACKEND_URL environment variable is not set")
+    st.stop()
+
 
 # BACKEND_URL = "http://127.0.0.1:8000"
 
